@@ -10,3 +10,5 @@
 'atom-workspace':
   'ctrl-alt-a': 'color-tabs:color-current-tab'
   'ctrl-alt-x': 'color-tabs:uncolor-current-tab'
+  'ctrl-shift-alt-a': 'color-tabs:color-all-tabs-by-ext'
+  'ctrl-shift-alt-x': 'color-tabs:uncolor-all-tabs-by-ext'

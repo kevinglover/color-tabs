@@ -1,10 +1,16 @@
+# Dependencies
 sep = require("path").sep
-log = require("atom-simple-logger")(pkg:"color-tabs",nsp:"core")
 CSON = require 'season'
-colorFile = atom.getConfigDirPath()+"color-tabs.cson"
+GitHubColors = require("github-colors");
+
+log = null
+colorFile = atom.getConfigDirPath()+"#{sep}color-tabs.cson"
 colors = {}
 colorChangeCb = null
 cssElements = {}
+
+
+
 getCssElement = (path, color) ->
   cssElement = cssElements[path]
   unless cssElement?
@@ -13,36 +19,122 @@ getCssElement = (path, color) ->
     cssElements[path] = cssElement
   while cssElement.firstChild?
     cssElement.removeChild cssElement.firstChild
+  return cssElement unless color
   path = path.replace(/\\/g,"\\\\")
-  cssElement.appendChild document.createTextNode """
-  ul.tab-bar>li.tab[data-path='#{path}'],
-  ul.tab-bar>li.tab[data-path='#{path}']:before,
-  ul.tab-bar>li.tab[data-path='#{path}']:after,
-  atom-workspace.theme-atom-light-ui ul.tab-bar>li.tab[data-path='#{path}'].active,
-  atom-workspace.theme-atom-light-ui ul.tab-bar>li.tab[data-path='#{path}'].active:before,
-  atom-workspace.theme-atom-light-ui ul.tab-bar>li.tab[data-path='#{path}'].active:after{
-    background-image:
-    -webkit-linear-gradient(top, #{color} 0%, rgba(0,0,0,0) 100%);
-  }
-  atom-workspace.theme-atom-dark-ui ul.tab-bar>li.tab[data-path='#{path}'],
-  atom-workspace.theme-atom-dark-ui ul.tab-bar>li.tab[data-path='#{path}']:before,
-  atom-workspace.theme-atom-dark-ui ul.tab-bar>li.tab[data-path='#{path}']:after{
-    background-image:
-    -webkit-linear-gradient(top, #{color} 0%, #333333 100%);
-  }
-  atom-workspace.theme-atom-dark-ui ul.tab-bar>li.tab[data-path='#{path}'].active,
-  atom-workspace.theme-atom-dark-ui ul.tab-bar>li.tab[data-path='#{path}'].active:before,
-  atom-workspace.theme-atom-dark-ui ul.tab-bar>li.tab[data-path='#{path}'].active:after{
-    background-image:
-    -webkit-linear-gradient(top, #{color} 0%, #222222 100%);
-  }
-  atom-workspace.theme-atom-light-ui ul.tab-bar>li.tab[data-path='#{path}'],
-  atom-workspace.theme-atom-light-ui ul.tab-bar>li.tab[data-path='#{path}']:before,
-  atom-workspace.theme-atom-light-ui ul.tab-bar>li.tab[data-path='#{path}']:after{
-    background-image:
-    -webkit-linear-gradient(top, #{color} 0%, #d9d9d9 100%);
-  }
-  """
+  cssBuilder = (oldcss="",{css, theme, active, marker, before, after}) ->
+    selector = "ul.tab-bar>li.tab[data-path='#{path}'][is='tabs-tab']"
+    if theme?
+      selector = "atom-workspace.theme-#{theme} " + selector
+    if marker
+      selector = selector + " .marker"
+    if active
+      selector = selector + ".active"
+    pureSelector = selector
+    if before
+      selector = selector + "," + pureSelector + ":before"
+    if after
+      selector = selector + "," + pureSelector + ":after"
+    return "#{oldcss}#{selector}{#{css}}"
+  css = ""
+
+  switch atom.config.get("color-tabs.backgroundStyle")
+    when "gradient"
+      css  = cssBuilder css,
+        css: "background-image:
+        -webkit-linear-gradient(top, #{color} 0%, rgba(0,0,0,0) 100%);"
+        before: true
+        after: true
+      css = cssBuilder css,
+        css: "background-image:
+        -webkit-linear-gradient(top, #{color} 0%, rgba(0,0,0,0) 100%);"
+        theme: "isotope-ui"
+        before: true
+        after: true
+      css = cssBuilder css,
+        css: "background-image:
+        -webkit-linear-gradient(top, #{color} 0%, rgba(0,0,0,0) 100%);"
+        theme: "atom-light-ui"
+        before: true
+        after: true
+        active: true
+      css = cssBuilder css,
+        css: "background-image:
+        -webkit-linear-gradient(top, #{color} 0%, #d9d9d9 100%);"
+        theme: "atom-light-ui"
+        before: true
+        after: true
+      css = cssBuilder css,
+        css: "background-image:
+        -webkit-linear-gradient(top, #{color} 0%, #222222 100%);"
+        theme: "atom-dark-ui"
+        before: true
+        after: true
+        active: true
+      css = cssBuilder css,
+        css: "background-image:
+        -webkit-linear-gradient(top, #{color} 0%, #333333 100%);"
+        theme: "atom-dark-ui"
+        before: true
+        after: true
+    when "solid"
+      if parseInt(color.replace('#', ''), 16) > 0xffffff/2
+        text_color = "black"
+      else
+        text_color = "white"
+      css = cssBuilder css,
+        css: "background-color: #{color}; color: #{text_color};
+        background-image: none;"
+        before: true
+        after: true
+      css = cssBuilder css,
+        css: "background-color: #{color};"
+        theme: "isotope-ui"
+        before: true
+        after: true
+
+  border = atom.config.get("color-tabs.borderStyle")
+  borderSize = atom.config.get("color-tabs.borderSize")
+  unless border == "none"
+    css = cssBuilder css,
+      css: "box-sizing: border-box;
+        border-#{border}: solid #{borderSize}px #{color};
+        border-image: none;
+      "
+      before: border == "top" or border == "bottom"
+      after: border == "top" or border == "bottom"
+
+  marker = atom.config.get "color-tabs.markerStyle"
+  unless marker == "none"
+    css = cssBuilder css,
+      css: "display: inline-block;
+        width: 0;
+        height: 0;
+        right: 0;
+        top: 0;
+        border-style: solid;
+        position: absolute;"
+
+      marker: true
+    switch marker
+      when "corner"
+        css = cssBuilder css,
+          css: "border-color: transparent #{color} transparent transparent;
+            border-width: 0 20px 20px 0;"
+          marker: true
+      when "round"
+        css = cssBuilder css,
+          css: "border-color: #{color};
+            border-width: 6px;
+            border-radius: 10px;"
+          marker: true
+      when "square"
+        css = cssBuilder css,
+          css: "border-color: #{color};
+            border-width: 6px;
+            border-radius: 3px;"
+          marker: true
+  cssElement.appendChild document.createTextNode css
+
   return cssElement
 getRandomColor= ->
   letters = '0123456789ABCDEF'.split('')
@@ -51,7 +143,11 @@ getRandomColor= ->
     color += letters[Math.floor(Math.random() * 16)]
   return color
 
-processPath= (path,color,revert=false,save=false) ->
+processPath= (path,color,revert=false,save=false,warn=false) ->
+  unless path?
+    if warn
+      atom.notifications.addWarning "coloring a unsaved tab is not supported"
+    return
   cssElement = getCssElement path, color
   unless revert
     if save
@@ -62,6 +158,11 @@ processPath= (path,color,revert=false,save=false) ->
       div.title[data-path='#{path.replace(/\\/g,"\\\\")}']"
     for tabDiv in tabDivs
       tabDiv.parentElement.setAttribute "data-path", path
+      marker = tabDiv.querySelector ".marker"
+      unless marker?
+        marker = document.createElement 'div'
+        marker.className = 'marker'
+        tabDiv.appendChild marker
     unless cssElement.parentElement?
       head = document.getElementsByTagName('head')[0]
       head.appendChild cssElement
@@ -101,7 +202,8 @@ module.exports =
 class ColorTabs
   disposables: null
 
-  constructor:  ->
+  constructor: (logger) ->
+    log = logger "core"
     CSON.readFile colorFile, (err, content) =>
       unless err
         colors = content
@@ -117,14 +219,37 @@ class ColorTabs
         'color-tabs:color-current-tab': =>
           te = atom.workspace.getActiveTextEditor()
           if te?.getPath?
-            @color te.getPath(), getRandomColor()
+            @color te.getPath(), getRandomColor(), true, true
+          else
+            atom.notifications.addWarning "coloring is only possible for file tabs"
         'color-tabs:uncolor-current-tab': =>
           te = atom.workspace.getActiveTextEditor()
           if te?.getPath?
             @color te.getPath(), false
+        'color-tabs:color-all-tabs-by-ext': =>
+          re = /(?:\.([^.]+))?$/
+          tes = atom.workspace.getTextEditors()
+          for te in tes
+            if te?.getPath?
+              file_ext = re.exec(te.getPath())[1]
+              if file_ext == 'json'
+                file_ext = "js"
+              ext_color = GitHubColors.ext(file_ext).color;
+              @color te.getPath(), ext_color, true, true
+            else
+              atom.notifications.addWarning "coloring is only possible for file tabs"
+        'color-tabs:uncolor-all-tabs-by-ext': =>
+          tes = atom.workspace.getTextEditors()
+          for te in tes
+            if te?.getPath?
+              @color te.getPath(), false
+      @disposables.add atom.config.observe("color-tabs.backgroundStyle",@repaint)
+      @disposables.add atom.config.observe("color-tabs.borderStyle",@repaint)
+      @disposables.add atom.config.observe("color-tabs.borderSize",@repaint)
+      @disposables.add atom.config.observe("color-tabs.markerStyle",@repaint)
     log "loaded"
-  color: (path, color) ->
-    processPath path, color, !color, true
+  color: (path, color, save=true, warn=false) ->
+    processPath path, color, !color, save, warn
   setColorChangeCb: (instance)->
     colorChangeCb = instance
   getColors: ->
@@ -132,9 +257,15 @@ class ColorTabs
       return colors
     else
       return {}
+  repaint: =>
+    if @processed
+      processAllTabs()
   toggle: =>
     @processed = processAllTabs(@processed)
   destroy: =>
     @processed = processAllTabs(true)
     @disposables?.dispose()
     @disposables = null
+    sep = null
+    log = null
+    CSON = null
